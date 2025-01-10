@@ -2,6 +2,7 @@ package com.example.sixthlab
 
 import android.annotation.SuppressLint
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
@@ -14,18 +15,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 
+// вхідні дані
 data class ElectricalEquipment(
     val name: String = "",
-    val efficiencyFactor: Double = 0.92,
-    val loadPowerFactor: Double = 0.9,
-    val loadVoltage: Double = 0.38,
-    val quantity: Int = 1,
-    val ratedPower: Int = 14,
-    val utilizationRate: Double = 0.12,
-    val reactivePowerFactor: Double = 0.75,
+    val efficiencyFactor: Double = 0.0,
+    val loadPowerFactor: Double = 0.0,
+    val loadVoltage: Double = 0.0,
+    val quantity: Int = 0,
+    val ratedPower: Int = 0,
+    val utilizationRate: Double = 0.0,
+    val reactivePowerFactor: Double = 0.0,
     val calculatedValues: EquipmentCalculatedValues = EquipmentCalculatedValues()
 )
 
+// для проміжних розрахунків
 data class EquipmentCalculatedValues(
     val powerTotal: Double = 0.0,              // n × Pн
     val utilizationPower: Double = 0.0,        // n × Pн × Кв
@@ -34,6 +37,7 @@ data class EquipmentCalculatedValues(
     val current: Double = 0.0                  // Ip
 )
 
+// результати
 data class WorkshopResults(
     val groupUtilizationRate: Double = 0.0,
     val effectiveEquipmentCount: Double = 0.0,
@@ -43,7 +47,7 @@ data class WorkshopResults(
     val fullPower: Double = 0.0,
     val estimatedGroupCurrent: Double = 0.0,
 
-    val utilizationRateAll: Int = 0,
+    val utilizationRateAll: Double = 0.0,
     val effectiveEquipmentCountAll: Int = 0,
     val estimatedActivePowerFactorAll: Double? = 0.0,
     val estimatedActiveLoadTires: Double = 0.0,
@@ -52,11 +56,15 @@ data class WorkshopResults(
     val estimatedGroupCurrentTires: Double = 0.0
 )
 
+// для таблиці 6.3 Значення розрахункових коефіцієнтів КР для
+// мереж живлення напругою до 1000 В
 data class TableEntry(
     val n: Int,
     val coefficients: Map<Double, Double>
 )
 
+// для таблиці 6.4 Значення розрахункових коефіцієнтів КР на шинах низької
+// напруги цехових трансформаторів і магістральних шинопроводів
 data class TableRange(
     val start: Int,
     val end: Int?,
@@ -264,6 +272,7 @@ class ElectricalLoadCalculator {
         ))
     )
 
+    // функція розрахунку проміжних результатів по кожному ЕП
     fun calculateEquipmentValues(equipment: ElectricalEquipment): ElectricalEquipment {
         // n * Pн
         val powerTotal = equipment.quantity.toDouble() * equipment.ratedPower
@@ -289,6 +298,7 @@ class ElectricalLoadCalculator {
         )
     }
 
+    // функція для пошуку розрахункового коефіцієнту активної потужності по таблиці 6.3
     private fun findCoefficient(n: Int, coefficient: Double): Double? {
         return tableData
             .find { it.n == n }
@@ -296,6 +306,7 @@ class ElectricalLoadCalculator {
             ?.get(coefficient)
     }
 
+    // функція для пошуку розрахункового коефіцієнту активної потужності по таблиці 6.4
     private fun findCoefficientRange(n: Int, coefficient: Double): Double? {
         return tableDataRange
             .find { range ->
@@ -330,7 +341,6 @@ class ElectricalLoadCalculator {
 
         // Отримання коефіцієнту з таблиці з перевіркою на null
         val estimatedActivePowerFactor = findCoefficient(roundedEffectiveEquipmentCount, roundedGroupUtilizationRate) ?: 1.25
-        println(estimatedActivePowerFactor)
 
         // Розрахункове активне навантаження
         val estimatedActiveLoad = estimatedActivePowerFactor * totalUtilizationPower
@@ -360,7 +370,7 @@ class ElectricalLoadCalculator {
         val squaredPowerAll = 96388
 
         // Коефіцієнти використання цеху в цілому
-        val utilizationRateAll = utilizationPowerAll / powerAll
+        val utilizationRateAll = utilizationPowerAll.toDouble() / powerAll
 
         // Ефективна кількість ЕП цеху в цілому
         val effectiveEquipmentCountAll = (Math.pow(powerAll.toDouble(), 2.0) / squaredPowerAll).toInt()
@@ -370,7 +380,6 @@ class ElectricalLoadCalculator {
 
         // Розрахунковий коефіцієнт активної потужності цеху в цілому
         val estimatedActivePowerFactorAll = findCoefficientRange(effectiveEquipmentCountAll, roundedUtilizationRateAll) ?: 0.7
-        println(estimatedActivePowerFactorAll)
 
         // Розрахункове активне навантаження на шинах 0,38 кВ ТП
         val estimatedActiveLoadTires = estimatedActivePowerFactorAll * utilizationPowerAll
@@ -396,7 +405,7 @@ class ElectricalLoadCalculator {
             fullPower = fullPower,
             estimatedGroupCurrent = estimatedGroupCurrent,
 
-            utilizationRateAll = utilizationRateAll,
+            utilizationRateAll = roundedUtilizationRateAll,
             effectiveEquipmentCountAll = effectiveEquipmentCountAll,
             estimatedActivePowerFactorAll = estimatedActivePowerFactorAll,
             estimatedActiveLoadTires = estimatedActiveLoadTires,
@@ -529,7 +538,6 @@ fun EquipmentInputCard(
                 onValueChange(equipment.copy(reactivePowerFactor = it))
             }
 
-            // Display calculated values for this equipment
             if (equipment.calculatedValues.powerTotal > 0) {
                 DisplayEquipmentResults(equipment.calculatedValues)
             }
@@ -578,7 +586,7 @@ fun DisplayWorkshopResults(results: WorkshopResults) {
             Text("Повна потужність: ${String.format("%.2f", results.fullPower)} кВ*А")
             Text("Розрахунковий груповий струм: ${String.format("%.2f", results.estimatedGroupCurrent)} А")
 
-            Text("Коефіцієнти використання цеху в цілому: ${String.format("%.4f", results.utilizationRateAll.toDouble())}")
+            Text("Коефіцієнти використання цеху в цілому: ${results.utilizationRateAll}")
             Text("Ефективна кількість ЕП цеху в цілому: ${results.effectiveEquipmentCountAll}")
             Text("Розрахунковий коефіцієнт активної потужності цеху в цілому: ${String.format("%.2f", results.estimatedActivePowerFactorAll)}")
             Text("Розрахункове активне навантаження на шинах 0,38 кВ ТП: ${String.format("%.2f", results.estimatedActiveLoadTires)} кВт")
@@ -668,246 +676,6 @@ fun InputFieldInt(
             .padding(vertical = 4.dp)
     )
 }
-
-
-//private fun calculateResults(data: Data): CalculationResults {
-//    // Груповий коефіцієнт використання для ШР1=ШР2=ШР3
-//    val groupUtillizationRate = 0.0
-//
-//    // Ефективна кількість ЕП для ШР1=ШР2=ШР3
-//    val effectiveAmountOfER = 0.0
-//
-//    // Розрахунковий коефіцієнт активної потужності для ШР1=ШР2=ШР3
-//    val estimatedActivePowerFactor =  0.0
-//
-//    // Розрахункове активне навантаження для ШР1=ШР2=ШР3
-//    val estimatedActiveLoad = 0.0
-//    // Розрахункове реактивне навантаження для ШР1=ШР2=ШР3
-//    val estimatedReactiveLoad = 0.0
-//    // Повна потужність для ШР1=ШР2=ШР3
-//    val fullPower = 0.0
-//    // Розрахунковий груповий струм для ШР1=ШР2=ШР3
-//    val estimatedGroupCurrent = 0.0
-//    // Коефіцієнти використання цеху в цілому
-//    val utilizationRateWorkshop = 0.0
-//    // Ефективна кількість ЕП цеху в цілому
-//    val effectiveAmountOfERWorkshop = 0.0
-//    // Розрахунковий коефіцієнт активної потужності цеху в цілому
-//    val estimatedActivePowerFactorWorkshop = 0.0
-//    // Розрахункове активне навантаження на шинах 0,38 кВ ТП
-//    val estimatedActiveLoadTires = 0.0
-//    // Розрахункове реактивне навантаження на шинах 0,38 кВ ТП
-//    val estimatedReactiveLoadTires = 0.0
-//    // Повна потужність на шинах 0,38 кВ ТП
-//    val fullPowerTires = 0.0
-//    // Розрахунковий груповий струм на шинах 0,38 кВ ТП
-//    val estimatedGroupCurrentTire = 0.0
-//
-//
-//    return CalculationResults(
-//        groupUtillizationRate = groupUtillizationRate,
-//        effectiveAmountOfER = effectiveAmountOfER,
-//        estimatedActivePowerFactor = estimatedActivePowerFactor,
-//        estimatedActiveLoad = estimatedActiveLoad,
-//        estimatedReactiveLoad = estimatedReactiveLoad,
-//        fullPower = fullPower,
-//        estimatedGroupCurrent = estimatedGroupCurrent,
-//        utilizationRateWorkshop = utilizationRateWorkshop,
-//        effectiveAmountOfERWorkshop = effectiveAmountOfERWorkshop,
-//        estimatedActivePowerFactorWorkshop = estimatedActivePowerFactorWorkshop,
-//        estimatedActiveLoadTires = estimatedActiveLoadTires,
-//        estimatedReactiveLoadTires = estimatedReactiveLoadTires,
-//        fullPowerTires = fullPowerTires,
-//        estimatedGroupCurrentTire = estimatedGroupCurrentTire,
-//    )
-//}
-
-//// вхідні дані
-//data class Data(
-//    val nameER: Double = 0.0,
-//    val efficiencyFactor: Double = 0.0,
-//    val loadPowerFactor: Double = 0.0,
-//    val loadVoltage: Double = 0.0,
-//    val numberOfER: Double = 0.0,
-//    val ratedPowerOutput: Double = 0.0,
-//    val utilizationRate: Double = 0.0,
-//    val reactivePowerFactor: Double = 0.0,
-//
-//)
-//
-//// результати розрахунків
-//data class CalculationResults(
-//    val groupUtillizationRate: Double = 0.0,
-//    val effectiveAmountOfER: Double = 0.0,
-//    val estimatedActivePowerFactor: Double = 0.0,
-//    val estimatedActiveLoad: Double = 0.0,
-//    val estimatedReactiveLoad: Double = 0.0,
-//    val fullPower: Double = 0.0,
-//    val estimatedGroupCurrent: Double = 0.0,
-//    val utilizationRateWorkshop: Double = 0.0,
-//    val effectiveAmountOfERWorkshop: Double = 0.0,
-//    val estimatedActivePowerFactorWorkshop: Double = 0.0,
-//    val estimatedActiveLoadTires: Double = 0.0,
-//    val estimatedReactiveLoadTires: Double = 0.0,
-//    val fullPowerTires: Double = 0.0,
-//    val estimatedGroupCurrentTire: Double = 0.0,
-//)
-//
-//@Composable
-//fun CalculatorScreen(
-//) {
-//    var data by remember { mutableStateOf(Data()) }
-//    var results by remember { mutableStateOf<CalculationResults?>(null) }
-//
-//    Column(
-//        modifier = Modifier
-//            .padding(16.dp)
-//            .verticalScroll(rememberScrollState())
-//    ) {
-//        Text(
-//            "Калькулятор для розрахунку електричних навантажень",
-//            style = MaterialTheme.typography.headlineMedium,
-//            modifier = Modifier.padding(bottom = 16.dp)
-//        )
-//
-//        InputField("Найменування ЕП", data.nameER) { data = data.copy(nameER = it) }
-//        InputField("Номінальне значення коефіцієнта корисної дії ЕП, ηн", data.efficiencyFactor) { data = data.copy(efficiencyFactor = it) }
-//        InputField("Коефіцієнт потужності навантаження, cos φ", data.loadPowerFactor) { data = data.copy(loadPowerFactor = it) }
-//        InputField("Напруга навантаження: Uн, кВ", data.loadVoltage) { data = data.copy(loadVoltage = it) }
-//        InputField("Кількість ЕП: n, шт", data.numberOfER) { data = data.copy(numberOfER = it) }
-//        InputField("Номінальна потужність ЕП: Рн, кВт", data.ratedPowerOutput) { data = data.copy(ratedPowerOutput = it) }
-//        InputField("Коефіцієнт використання: КВ", data.utilizationRate) { data = data.copy(utilizationRate = it) }
-//        InputField("Коефіцієнт реактивної потужності: tgφ", data.reactivePowerFactor) { data = data.copy(reactivePowerFactor = it) }
-//
-//        Button(
-//            onClick = { results = calculateResults(data) },
-//            modifier = Modifier
-//                .fillMaxWidth()
-//                .padding(vertical = 16.dp)
-//                .size(width = 300.dp, height = 50.dp),
-//
-//            ) {
-//            Text("Розрахувати")
-//        }
-//
-//        results?.let { DisplayResults(it) }
-//    }
-//}
-//
-//@Composable
-//fun InputField(
-//    label: String,
-//    value: Double,
-//    onValueChange: (Double) -> Unit
-//) {
-//    OutlinedTextField(
-//        value = if (value == 0.0) "" else value.toString(),
-//        onValueChange = {
-//            onValueChange(it.toDoubleOrNull() ?: 0.0)
-//        },
-//        label = { Text(label) },
-//        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-//        modifier = Modifier
-//            .fillMaxWidth()
-//            .padding(vertical = 4.dp)
-//    )
-//}
-//
-//@Composable
-//fun DisplayResults(results: CalculationResults) {
-//    Column(
-//        modifier = Modifier
-//            .fillMaxWidth()
-//            .padding(vertical = 16.dp)
-//    ) {
-//        Text(
-//            "Результати розрахунків:",
-//            style = MaterialTheme.typography.titleLarge,
-//            modifier = Modifier.padding(bottom = 8.dp)
-//        )
-//
-//        ResultItem("Груповий коефіцієнт використання для ШР1=ШР2=ШР3", results.groupUtillizationRate, "")
-//        ResultItem("Ефективна кількість ЕП для ШР1=ШР2=ШР3", results.effectiveAmountOfER, "")
-//        ResultItem("Розрахунковий коефіцієнт активної потужності для ШР1=ШР2=ШР3", results.estimatedActivePowerFactor, "")
-//        ResultItem("Розрахункове активне навантаження для ШР1=ШР2=ШР3", results.estimatedActiveLoad, "кВт")
-//        ResultItem("Розрахункове реактивне навантаження для ШР1=ШР2=ШР3", results.estimatedReactiveLoad, "квар.")
-//        ResultItem("Повна потужність для ШР1=ШР2=ШР3", results.fullPower, "кВ*А")
-//        ResultItem("Розрахунковий груповий струм для ШР1=ШР2=ШР3", results.estimatedGroupCurrent, "А")
-//        ResultItem("Коефіцієнти використання цеху в цілому", results.utilizationRateWorkshop, "")
-//        ResultItem("Ефективна кількість ЕП цеху в цілому", results.effectiveAmountOfERWorkshop, "")
-//        ResultItem("Розрахунковий коефіцієнт активної потужності цеху в цілому", results.estimatedActivePowerFactorWorkshop, "")
-//        ResultItem("Розрахункове активне навантаження на шинах 0,38 кВ ТП", results.estimatedActiveLoadTires, "кВт")
-//        ResultItem("Розрахункове реактивне навантаження на шинах 0,38 кВ ТП", results.estimatedReactiveLoadTires, "квар.")
-//        ResultItem("Повна потужність на шинах 0,38 кВ ТП", results.fullPowerTires, "кВ*А")
-//        ResultItem("Розрахунковий груповий струм на шинах 0,38 кВ ТП", results.estimatedGroupCurrentTire, "А")
-//    }
-//}
-//
-//@SuppressLint("DefaultLocale")
-//@Composable
-//fun ResultItem(label: String, value: Double, sign: String) {
-//    Row(
-//        modifier = Modifier
-//            .fillMaxWidth()
-//            .padding(vertical = 2.dp),
-//        horizontalArrangement = Arrangement.SpaceBetween
-//    ) {
-//        Text(label)
-//        Text(String.format("%.4f", value) + " " + sign)
-//    }
-//}
-//
-//private fun calculateResults(data: Data): CalculationResults {
-//    // Груповий коефіцієнт використання для ШР1=ШР2=ШР3
-//    val groupUtillizationRate = 0.0
-//
-//    // Ефективна кількість ЕП для ШР1=ШР2=ШР3
-//    val effectiveAmountOfER = 0.0
-//
-//    // Розрахунковий коефіцієнт активної потужності для ШР1=ШР2=ШР3
-//    val estimatedActivePowerFactor =  0.0
-//
-//    // Розрахункове активне навантаження для ШР1=ШР2=ШР3
-//    val estimatedActiveLoad = 0.0
-//    // Розрахункове реактивне навантаження для ШР1=ШР2=ШР3
-//    val estimatedReactiveLoad = 0.0
-//    // Повна потужність для ШР1=ШР2=ШР3
-//    val fullPower = 0.0
-//    // Розрахунковий груповий струм для ШР1=ШР2=ШР3
-//    val estimatedGroupCurrent = 0.0
-//    // Коефіцієнти використання цеху в цілому
-//    val utilizationRateWorkshop = 0.0
-//    // Ефективна кількість ЕП цеху в цілому
-//    val effectiveAmountOfERWorkshop = 0.0
-//    // Розрахунковий коефіцієнт активної потужності цеху в цілому
-//    val estimatedActivePowerFactorWorkshop = 0.0
-//    // Розрахункове активне навантаження на шинах 0,38 кВ ТП
-//    val estimatedActiveLoadTires = 0.0
-//    // Розрахункове реактивне навантаження на шинах 0,38 кВ ТП
-//    val estimatedReactiveLoadTires = 0.0
-//    // Повна потужність на шинах 0,38 кВ ТП
-//    val fullPowerTires = 0.0
-//    // Розрахунковий груповий струм на шинах 0,38 кВ ТП
-//    val estimatedGroupCurrentTire = 0.0
-//
-//
-//    return CalculationResults(
-//        groupUtillizationRate = groupUtillizationRate,
-//        effectiveAmountOfER = effectiveAmountOfER,
-//        estimatedActivePowerFactor = estimatedActivePowerFactor,
-//        estimatedActiveLoad = estimatedActiveLoad,
-//        estimatedReactiveLoad = estimatedReactiveLoad,
-//        fullPower = fullPower,
-//        estimatedGroupCurrent = estimatedGroupCurrent,
-//        utilizationRateWorkshop = utilizationRateWorkshop,
-//        effectiveAmountOfERWorkshop = effectiveAmountOfERWorkshop,
-//        estimatedActivePowerFactorWorkshop = estimatedActivePowerFactorWorkshop,
-//        estimatedActiveLoadTires = estimatedActiveLoadTires,
-//        estimatedReactiveLoadTires = estimatedReactiveLoadTires,
-//        fullPowerTires = fullPowerTires,
-//        estimatedGroupCurrentTire = estimatedGroupCurrentTire,
-//    )
-//}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
